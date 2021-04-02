@@ -1,0 +1,1 @@
+python.exe cw.py -s big  -t 550 -w 20

@@ -3,9 +3,14 @@
 Make sounds or light pulses from Morse code data
 """
 
+import os.path
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 import time
 from array import array
 import math
+import numpy as np
+import pyaudio
 
 try:
     import pygame
@@ -15,8 +20,10 @@ from six.moves import xrange
 
 from morsecodelib import config
 from morsecodelib import text
-
-
+def koperta(x,w):
+    #print(x)
+#    w=15
+    return np.tanh(w*x)+np.tanh(w*(1-x))-1.0
 class MorsePlayer(object):
     """
     Take text and render it as something.
@@ -37,15 +44,39 @@ class MorsePlayer(object):
         Plays a Morse code word through the speakers
         This does all the official timing.
         """
+        p = pyaudio.PyAudio()
+        volume = 1     # range [0.0, 1.0]
+        fs = config.config.SAMPLE_RATE# sampling rate, Hz, must be integer
+        w=15
+        f = config.config.FREQUENCY
+        x=np.arange(fs*config.config.DIT_DURATION)
+        xd=np.arange(fs*config.config.DAH_DURATION)
+        nic=np.zeros(int(config.config.DIT_DURATION*fs)).astype(np.float32)
+        dit =(koperta(x/(config.config.DIT_DURATION*fs),w)*np.sin(2*np.pi*x*(f/fs))).astype(np.float32)
+        dah=(koperta(xd/(config.config.DAH_DURATION*fs),3*w)*np.sin(2*np.pi*xd*(f/fs))).astype(np.float32)
+        a=np.zeros(1).astype(np.float32)
         for letter in word.split(' '):
             for char in letter:
                 if char == '.':
-                    self.play_dit()
+                    a=np.append(a,dit)
                 elif char == '-':
-                    self.play_dah()
-                time.sleep(config.config.DIT_DURATION)
-            time.sleep(config.config.DAH_DURATION)
+                    a=np.append(a,dah)
+                a=np.append(a,nic)
+            a=np.append(a,nic)
+            a=np.append(a,nic)
+            a=np.append(a,nic)
         time.sleep(config.config.DIT_DURATION * 7)
+        stream = p.open(format=pyaudio.paFloat32,
+                channels=1,
+                rate=fs,
+                output=True)
+
+# play. May repeat with different volume values (if done interactively) 
+#np.savetxt('my_filenmame', sumasamples, fmt='%4.6f', delimiter=' ')
+        stream.write(volume*a.tobytes())
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
 
     def play_dit(self):
         """
@@ -116,7 +147,6 @@ if pygame:
 
         def _init_samples(self, period):
             return array("h", [0] * period)
-
         def sine_wave(self, amplitude, period):
             samples = self._init_samples(period)
             for time in xrange(period):
